@@ -1,4 +1,6 @@
-// Telemetry and monitoring utilities
+// lib/telemetry.ts
+
+// Telemetry event structure
 export interface TelemetryEvent {
   event: string;
   userId?: string;
@@ -8,16 +10,16 @@ export interface TelemetryEvent {
   timestamp: Date;
 }
 
-export class Telemetry {
+// Telemetry utility class
+export default class Telemetry {
   static track(event: string, properties?: Record<string, any>) {
-    // In development, just log to console
+    // In development, log to console
     if (process.env.NODE_ENV === 'development') {
       console.log('[Telemetry]', event, properties);
       return;
     }
 
-    // In production, you would send to your telemetry service
-    // For now, we'll just log
+    // Production logging (placeholder)
     const telemetryEvent: TelemetryEvent = {
       event,
       properties,
@@ -28,11 +30,7 @@ export class Telemetry {
   }
 
   static trackUserAction(action: string, userId?: string, properties?: Record<string, any>) {
-    this.track(action, {
-      ...properties,
-      userId,
-      type: 'user_action',
-    });
+    this.track(action, { ...properties, userId, type: 'user_action' });
   }
 
   static trackAPIUsage(endpoint: string, userId?: string, properties?: Record<string, any>) {
@@ -52,6 +50,9 @@ export class Telemetry {
       type: 'error',
     });
   }
-}
 
-export default Telemetry;
+  // New method replacing TelemetryService.logAIExecution
+  static logAIExecution(data: Record<string, any>) {
+    this.track('ai_execution', data);
+  }
+}
