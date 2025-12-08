@@ -17,6 +17,4 @@ export { LayoutDesignerAgent } from './definitions/layout-designer';
 export { ExportCompilerAgent } from './definitions/export-compiler';
 export { DeploymentAgent } from './definitions/deployment-agent';
 
-// Registry
-export { agentRegistry } from './registry';
-export type { AgentDefinition as RegistryAgentDefinition } from './registry';
+// No registry exports — registry file does NOT exist
