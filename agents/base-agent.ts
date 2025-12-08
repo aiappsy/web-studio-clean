@@ -1,147 +1,219 @@
-import {
-  OpenRouterMessage,
-  OpenRouterOptions,
-  openRouterClient,
-} from "@/lib/openrouter";
-import { withRetry, withTimeout } from "@/lib/errors";
-import Telemetry from "@/lib/telemetry";
+// agents/base-agent.ts
 
-export interface AgentContext {
-  userId?: string;
-  projectId?: string;
-  sessionId?: string;
-  metadata?: Record<string, any>;
+export type AgentKind =
+  | "website-architect"
+  | "content-writer"
+  | "layout-designer";
+
+export interface BaseAgentConfig {
+  /**
+   * LLM model id, e.g.
+   * - "deepseek/deepseek-r1:free"
+   * - "gpt-4.1-mini"
+   */
+  model: string;
+  temperature?: number;
+  maxTokens?: number;
+  stream?: boolean;
+  /**
+   * Optional system prompt override.
+   * If omitted, each agent will provide its own default.
+   */
+  systemPrompt?: string;
+}
+
+export interface AgentRunOptions {
+  input: string;
+  context?: Record<string, any>;
+  /**
+   * Token-level streaming callback.
+   * If provided, the agent will request a streaming response
+   * and call this for each token/chunk.
+   */
+  onToken?: (chunk: AgentStreamChunk) => void;
+  signal?: AbortSignal;
+}
+
+export interface AgentStreamChunk {
+  token: string;
+  fullText: string;
 }
 
 export interface AgentResult {
-  success: boolean;
+  /**
+   * The final, concatenated model output.
+   */
+  text: string;
+  /**
+   * Optional structured payload each agent may attach.
+   * (e.g. JSON layout, section structure, etc.)
+   */
   data?: any;
-  error?: string;
-  tokenUsage?: {
-    prompt: number;
-    completion: number;
-    total: number;
-  };
-  latency: number;
-  model: string;
-  agent: string;
-  executionId: string;
-}
-
-export interface AgentDefinition {
-  name: string;
-  description: string;
-  systemPrompt: string;
-  defaultModel?: string;
-  temperature?: number;
-  maxTokens?: number;
-  onPreProcess?: (input: any, context?: AgentContext) => any;
-  onPostProcess?: (output: any, context?: AgentContext) => any;
-  validateInput?: (input: any) => boolean;
-  validateOutput?: (output: any) => boolean;
 }
 
 export abstract class BaseAgent {
-  protected definition: AgentDefinition;
-  protected context?: AgentContext;
+  readonly id: string;
+  readonly kind: AgentKind;
+  readonly name: string;
+  readonly description: string;
 
-  constructor(definition: AgentDefinition) {
-    this.definition = definition;
+  protected config: BaseAgentConfig;
+
+  constructor(
+    id: string,
+    kind: AgentKind,
+    name: string,
+    description: string,
+    config: BaseAgentConfig
+  ) {
+    this.id = id;
+    this.kind = kind;
+    this.name = name;
+    this.description = description;
+    this.config = {
+      temperature: 0.2,
+      maxTokens: 2048,
+      stream: true,
+      ...config,
+    };
   }
 
-  setContext(context: AgentContext): void {
-    this.context = context;
-  }
+  /** Override to customize the system prompt per agent. */
+  protected abstract getDefaultSystemPrompt(): string;
 
-  protected async executeWithOpenRouter(
-    messages: OpenRouterMessage[],
-    options: OpenRouterOptions = {},
-    onChunk?: (chunk: string) => void
-  ): Promise<any> {
-    const executionId = this.context?.sessionId || crypto.randomUUID();
-    const startTime = Date.now();
+  /**
+   * Override to build the user prompt from raw input + context.
+   * Context may include things like:
+   * - businessDetails
+   * - targetAudience
+   * - previousAgentOutput
+   */
+  protected abstract buildUserPrompt(
+    input: string,
+    context?: Record<string, any>
+  ): string;
 
-    try {
-      let processed = messages;
-      if (this.definition.onPreProcess) {
-        processed = this.definition.onPreProcess(messages, this.context);
-      }
+  /**
+   * Main entrypoint for running the agent.
+   * Handles streaming + non-streaming, returns final text + optional data.
+   */
+  async run(options: AgentRunOptions): Promise<AgentResult> {
+    const { input, context, onToken, signal } = options;
 
-      const completion = await withTimeout(
-        withRetry(async () => {
-          if (onChunk) {
-            return openRouterClient.createStreamingCompletion(
-              processed,
-              {
-                model: this.definition.defaultModel,
-                temperature: this.definition.temperature,
-                max_tokens: this.definition.maxTokens,
-                ...options,
-              },
-              onChunk
-            );
-          }
+    const systemPrompt =
+      this.config.systemPrompt ?? this.getDefaultSystemPrompt();
+    const userPrompt = this.buildUserPrompt(input, context);
 
-          return openRouterClient.createChatCompletion(processed, {
-            model: this.definition.defaultModel,
-            temperature: this.definition.temperature,
-            max_tokens: this.definition.maxTokens,
-            ...options,
-          });
-        }),
-        30000
+    const apiKey =
+      process.env.OPENROUTER_API_KEY ??
+      process.env.OPENAI_API_KEY ??
+      process.env.OPENAI_API_KEY_WEBSTUDIO; // fallback in case you added a custom one
+
+    if (!apiKey) {
+      throw new Error(
+        `[${this.name}] Missing OPENROUTER_API_KEY or OPENAI_API_KEY in environment.`
       );
+    }
 
-      let result = completion.choices?.[0]?.message?.content || "";
+    const model =
+      this.config.model ||
+      process.env.OPENROUTER_DEFAULT_MODEL ||
+      "deepseek/deepseek-r1:free";
 
-      if (this.definition.onPostProcess) {
-        result = this.definition.onPostProcess(result, this.context);
+    const useStreaming = Boolean(onToken ?? this.config.stream);
+
+    const body = {
+      model,
+      stream: useStreaming,
+      temperature: this.config.temperature ?? 0.2,
+      max_tokens: this.config.maxTokens ?? 2048,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+    };
+
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    };
+
+    // OpenRouter-friendly metadata (safe no-ops for plain OpenAI)
+    if (process.env.OPENROUTER_SITE_URL) {
+      headers["HTTP-Referer"] = process.env.OPENROUTER_SITE_URL;
+    }
+    if (process.env.OPENROUTER_APP_NAME) {
+      headers["X-Title"] = process.env.OPENROUTER_APP_NAME;
+    }
+
+    const response = await fetch(
+      "https://openrouter.ai/api/v1/chat/completions",
+      {
+        method: "POST",
+        headers,
+        body: JSON.stringify(body),
+        signal,
+      }
+    );
+
+    if (!response.ok) {
+      const text = await response.text().catch(() => "");
+      throw new Error(
+        `[${this.name}] LLM request failed (${response.status}): ${text}`
+      );
+    }
+
+    if (useStreaming) {
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error(`[${this.name}] Streaming not supported in this env.`);
       }
 
-      const latency = Date.now() - startTime;
-      const usage = completion.usage || {
-        prompt_tokens: 0,
-        completion_tokens: 0,
-        total_tokens: 0,
-      };
+      const decoder = new TextDecoder("utf-8");
+      let fullText = "";
 
-      Telemetry.track("agent_execution", {
-        agentName: this.definition.name,
-        latency,
-        tokens: usage,
-      });
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        if (!value) continue;
 
-      return {
-        success: true,
-        data: result,
-        tokenUsage: {
-          prompt: usage.prompt_tokens,
-          completion: usage.completion_tokens,
-          total: usage.total_tokens,
-        },
-        latency,
-        model: completion.model,
-        agent: this.definition.name,
-        executionId,
-      };
-    } catch (err) {
-      const latency = Date.now() - startTime;
+        const chunkText = decoder.decode(value, { stream: true });
+        const lines = chunkText.split("\n");
 
-      return {
-        success: false,
-        error: err instanceof Error ? err.message : "Unknown error",
-        latency,
-        model: this.definition.defaultModel || "unknown",
-        agent: this.definition.name,
-        executionId,
-      };
+        for (const rawLine of lines) {
+          const line = rawLine.trim();
+          if (!line.startsWith("data:")) continue;
+
+          const payload = line.slice("data:".length).trim();
+          if (!payload || payload === "[DONE]") continue;
+
+          try {
+            const json = JSON.parse(payload);
+            const delta =
+              json.choices?.[0]?.delta?.content ??
+              json.choices?.[0]?.message?.content ??
+              "";
+
+            if (typeof delta === "string" && delta.length > 0) {
+              fullText += delta;
+              if (onToken) {
+                onToken({ token: delta, fullText });
+              }
+            }
+          } catch {
+            // ignore malformed SSE lines
+          }
+        }
+      }
+
+      return { text: fullText };
+    } else {
+      const json = await response.json();
+      const content =
+        json.choices?.[0]?.message?.content ??
+        json.choices?.[0]?.delta?.content ??
+        "";
+      return { text: typeof content === "string" ? content : "" };
     }
   }
-
-  abstract execute(input: any, options?: OpenRouterOptions): Promise<AgentResult>;
 }
-
-export type {
-  OpenRouterMessage,
-  OpenRouterOptions,
-};
