@@ -1,0 +1,58 @@
+// Prisma schema for AiAppsy Web Studio
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String    @id @default(uuid())
+  email     String    @unique
+  password  String
+  name      String?
+  projects  Project[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@map("users")
+}
+
+model Project {
+  id          String    @id @default(uuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  name        String
+  description String?
+  thumbnail   String?
+  
+  sitemap     Json      @default("{}");
+  theme       Json      @default("{}");
+  sections    Json      @default("[]");
+  codeOutput  Json?
+  
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  history     History[]
+  
+  @@index([userId])
+  @@map("projects")
+}
+
+model History {
+  id         String   @id @default(uuid())
+  projectId  String
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  changeType String
+  before     Json
+  after      Json
+  timestamp  DateTime @default(now())
+  
+  @@index([projectId])
+  @@map("history")
+}
