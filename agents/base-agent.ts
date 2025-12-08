@@ -1,6 +1,8 @@
+// agents/base-agent.ts
+
 import { OpenRouterMessage, OpenRouterOptions, openRouterClient } from '@/lib/openrouter'
 import { withTimeout, withRetry } from '@/lib/errors'
-import { TelemetryService } from '@/lib/telemetry'
+import Telemetry from '@/lib/telemetry'
 
 export interface AgentContext {
   userId?: string
@@ -64,7 +66,7 @@ export abstract class BaseAgent {
         processedMessages = this.definition.onPreProcess(messages, this.context)
       }
 
-      // Execute with timeout and retry
+      // Execute with retry + timeout
       const completion = await withTimeout(
         withRetry(async () => {
           if (onChunk) {
@@ -78,19 +80,19 @@ export abstract class BaseAgent {
               },
               onChunk
             )
-          } else {
-            return await openRouterClient.createChatCompletion(
-              processedMessages,
-              {
-                model: this.definition.defaultModel,
-                temperature: this.definition.temperature,
-                max_tokens: this.definition.maxTokens,
-                ...options,
-              }
-            )
           }
+
+          return await openRouterClient.createChatCompletion(
+            processedMessages,
+            {
+              model: this.definition.defaultModel,
+              temperature: this.definition.temperature,
+              max_tokens: this.definition.maxTokens,
+              ...options,
+            }
+          )
         }),
-        30000 // 30 second timeout
+        30000 // 30s timeout
       )
 
       // Post-processing
@@ -99,20 +101,22 @@ export abstract class BaseAgent {
         result = this.definition.onPostProcess(result, this.context)
       }
 
-      // Validate output
+      // Validation
       if (this.definition.validateOutput && !this.definition.validateOutput(result)) {
         throw new Error('Agent output validation failed')
       }
 
       const latency = Date.now() - startTime
-      const tokenUsage = completion.usage ? {
-        prompt: completion.usage.prompt_tokens || 0,
-        completion: completion.usage.completion_tokens || 0,
-        total: completion.usage.total_tokens || 0,
-      } : { prompt: 0, completion: 0, total: 0 }
+      const tokenUsage = completion.usage
+        ? {
+            prompt: completion.usage.prompt_tokens || 0,
+            completion: completion.usage.completion_tokens || 0,
+            total: completion.usage.total_tokens || 0,
+          }
+        : { prompt: 0, completion: 0, total: 0 }
 
-      // Log execution
-      await TelemetryService.logAIExecution({
+      // Telemetry logging
+      Telemetry.logAIExecution({
         agentName: this.definition.name,
         modelName: completion.model,
         inputTokens: tokenUsage.prompt,
@@ -141,8 +145,7 @@ export abstract class BaseAgent {
     } catch (error) {
       const latency = Date.now() - startTime
 
-      // Log failed execution
-      await TelemetryService.logAIExecution({
+      Telemetry.logAIExecution({
         agentName: this.definition.name,
         modelName: this.definition.defaultModel || 'unknown',
         latency,
