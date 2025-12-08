@@ -1,20 +1,12 @@
-// Base Agent System
-export { BaseAgent } from './base-agent';
-export type { 
-  AgentDefinition,
-  AgentContext,
-  AgentResult,
-  OpenRouterMessage
-} from './base-agent';
+// agents/index.ts
 
-// Agent Runner
-export { AgentRunner, agentRunner } from './runner';
+// Core
+export * from "./base-agent";
 
-// Agent Definitions
-export { WebsiteArchitectAgent } from './definitions/website-architect';
-export { ContentWriterAgent } from './definitions/content-writer';
-export { LayoutDesignerAgent } from './definitions/layout-designer';
-export { ExportCompilerAgent } from './definitions/export-compiler';
-export { DeploymentAgent } from './definitions/deployment-agent';
+// Concrete agents
+export * from "./website-architect";
+export * from "./content-writer";
+export * from "./layout-designer";
 
-// No registry exports — registry file does NOT exist
+// Runner
+export * from "./runner";
