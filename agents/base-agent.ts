@@ -3,7 +3,7 @@ import {
   OpenRouterOptions,
   openRouterClient,
 } from "@/lib/openrouter";
-import { withTimeout, withRetry } from "@/lib/errors";
+import { withRetry, withTimeout } from "@/lib/errors";
 import Telemetry from "@/lib/telemetry";
 
 export interface AgentContext {
@@ -62,21 +62,16 @@ export abstract class BaseAgent {
     const startTime = Date.now();
 
     try {
-      // Pre-processing step
-      let processedMessages = messages;
+      let processed = messages;
       if (this.definition.onPreProcess) {
-        processedMessages = this.definition.onPreProcess(
-          messages,
-          this.context
-        );
+        processed = this.definition.onPreProcess(messages, this.context);
       }
 
-      // Execute with timeout + retry handling
       const completion = await withTimeout(
         withRetry(async () => {
           if (onChunk) {
-            return await openRouterClient.createStreamingCompletion(
-              processedMessages,
+            return openRouterClient.createStreamingCompletion(
+              processed,
               {
                 model: this.definition.defaultModel,
                 temperature: this.definition.temperature,
@@ -87,61 +82,43 @@ export abstract class BaseAgent {
             );
           }
 
-          return await openRouterClient.createChatCompletion(
-            processedMessages,
-            {
-              model: this.definition.defaultModel,
-              temperature: this.definition.temperature,
-              max_tokens: this.definition.maxTokens,
-              ...options,
-            }
-          );
+          return openRouterClient.createChatCompletion(processed, {
+            model: this.definition.defaultModel,
+            temperature: this.definition.temperature,
+            max_tokens: this.definition.maxTokens,
+            ...options,
+          });
         }),
         30000
       );
 
-      // Post-processing
-      let result = completion.choices?.[0]?.message?.content;
+      let result = completion.choices?.[0]?.message?.content || "";
+
       if (this.definition.onPostProcess) {
         result = this.definition.onPostProcess(result, this.context);
       }
 
-      // Output validation
-      if (
-        this.definition.validateOutput &&
-        !this.definition.validateOutput(result)
-      ) {
-        throw new Error("Agent output validation failed");
-      }
-
-      // Compute performance metrics
       const latency = Date.now() - startTime;
-      const tokenUsage = completion.usage
-        ? {
-            prompt: completion.usage.prompt_tokens || 0,
-            completion: completion.usage.completion_tokens || 0,
-            total: completion.usage.total_tokens || 0,
-          }
-        : { prompt: 0, completion: 0, total: 0 };
+      const usage = completion.usage || {
+        prompt_tokens: 0,
+        completion_tokens: 0,
+        total_tokens: 0,
+      };
 
-      // Telemetry logging (success)
-      Telemetry.logAIExecution({
+      Telemetry.track("agent_execution", {
         agentName: this.definition.name,
-        modelName: completion.model,
-        inputTokens: tokenUsage.prompt,
-        outputTokens: tokenUsage.completion,
-        totalTokens: tokenUsage.total,
         latency,
-        success: true,
-        userId: this.context?.userId,
-        projectId: this.context?.projectId,
-        metadata: { executionId, ...this.context?.metadata },
+        tokens: usage,
       });
 
       return {
         success: true,
         data: result,
-        tokenUsage,
+        tokenUsage: {
+          prompt: usage.prompt_tokens,
+          completion: usage.completion_tokens,
+          total: usage.total_tokens,
+        },
         latency,
         model: completion.model,
         agent: this.definition.name,
@@ -149,17 +126,6 @@ export abstract class BaseAgent {
       };
     } catch (err) {
       const latency = Date.now() - startTime;
-
-      Telemetry.logAIExecution({
-        agentName: this.definition.name,
-        modelName: this.definition.defaultModel || "unknown",
-        latency,
-        success: false,
-        error: err instanceof Error ? err.message : "Unknown error",
-        userId: this.context?.userId,
-        projectId: this.context?.projectId,
-        metadata: { executionId, ...this.context?.metadata },
-      });
 
       return {
         success: false,
@@ -172,11 +138,10 @@ export abstract class BaseAgent {
     }
   }
 
-  abstract execute(
-    input: any,
-    options?: OpenRouterOptions
-  ): Promise<AgentResult>;
+  abstract execute(input: any, options?: OpenRouterOptions): Promise<AgentResult>;
 }
 
-// ⭐ REQUIRED EXPORT TO FIX YOUR DEPLOYMENT
-export type { OpenRouterMessage };
+export type {
+  OpenRouterMessage,
+  OpenRouterOptions,
+};
