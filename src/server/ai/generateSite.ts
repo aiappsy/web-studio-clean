@@ -1,0 +1,1 @@
+export async function generateSite(input){ return {name:'AI Site'} }

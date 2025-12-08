@@ -1,0 +1,1 @@
+export async function applyPatch(site,instruction){ return site }

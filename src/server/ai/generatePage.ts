@@ -1,0 +1,1 @@
+export async function generatePage(site,page){ return {sections:[]} }

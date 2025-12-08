@@ -1,0 +1,1 @@
+export function exportToHtml(site){ return `<html><body>${JSON.stringify(site)}</body></html>` }
