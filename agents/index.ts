@@ -1,10 +1,10 @@
 // Base Agent System
 export { BaseAgent } from './base-agent';
 export type { 
-  BaseAgentConfig, 
-  AgentResponse, 
-  AgentCapabilities,
-  AgentMetrics 
+  AgentDefinition,
+  AgentContext,
+  AgentResult,
+  OpenRouterMessage
 } from './base-agent';
 
 // Agent Runner
@@ -25,4 +25,4 @@ export { DeploymentAgent } from './definitions/deployment-agent';
 
 // Registry
 export { agentRegistry } from './registry';
-export type { AgentDefinition } from './registry';
+export type { AgentDefinition as RegistryAgentDefinition } from './registry';
