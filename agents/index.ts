@@ -8,13 +8,7 @@ export type {
 } from './base-agent';
 
 // Agent Runner
-export { AgentRunner } from './runner';
-export type { 
-  AgentRunnerConfig, 
-  PipelineStage, 
-  ExecutionContext,
-  ExecutionResult 
-} from './runner';
+export { AgentRunner, agentRunner } from './runner';
 
 // Agent Definitions
 export { WebsiteArchitectAgent } from './definitions/website-architect';
