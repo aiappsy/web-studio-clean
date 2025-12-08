@@ -23,7 +23,14 @@
   "devDependencies": {
     "prisma": "5.9.1",
     "postcss": "8.4.31",
+    "eslint": "8.56.0",
     "typescript": "5.3.3",
-    "eslint": "8.56.0"
+
+    "@types/node": "20.11.5",
+    "@types/react": "18.2.47",
+    "@types/react-dom": "18.2.17",
+    "@types/bcryptjs": "2.4.2",
+
+    "eslint-config-next": "14.1.0"
   }
 }
