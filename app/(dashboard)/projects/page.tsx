@@ -1,76 +1,76 @@
-import { getProjects } from "@/app/(dashboard)/actions";
+import { getServerSession } from "next-auth";
+import { redirect } from "next/navigation";
 import Link from "next/link";
-import { auth } from "@/lib/auth";
+import { getProjects } from "./actions"; // uses the server action we fixed
+import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 
 export default async function ProjectsPage() {
-  const session = await auth();
+  // 1️⃣ AUTH — protect this page
+  const session = await getServerSession(authOptions);
 
-  // User must be logged in
-  if (!session?.user) {
-    return <div className="p-8">Not authenticated.</div>;
+  if (!session || !session.user) {
+    redirect("/auth"); // send unauthenticated users to login
   }
 
   const workspaceId = session.user.workspaceId;
 
-  // Fetch projects for this workspace
-  const result = await getProjects(workspaceId);
-
-  if (!result?.success) {
+  if (!workspaceId) {
     return (
-      <div className="p-8 text-red-600">
-        Failed to load projects.
+      <div className="p-6">
+        <h2 className="text-xl font-semibold">No workspace found</h2>
+        <p className="text-gray-600 mt-2">
+          Your account does not have an assigned workspace.
+        </p>
       </div>
     );
   }
 
-  const projects = result.projects;
+  // 2️⃣ LOAD PROJECTS FOR THIS WORKSPACE
+  const { success, projects, error } = await getProjects(workspaceId);
+
+  if (!success) {
+    return (
+      <div className="p-6">
+        <h2 className="text-xl font-semibold">Error loading projects</h2>
+        <p className="text-red-600 mt-2">{error}</p>
+      </div>
+    );
+  }
 
   return (
-    <div className="p-8 space-y-6">
-      <h1 className="text-2xl font-semibold">Your Projects</h1>
+    <div className="p-8">
+      <div className="flex justify-between items-center mb-8">
+        <h1 className="text-3xl font-bold">Your Projects</h1>
 
-      {/* Create Project Form */}
-      <form
-        action="/dashboard/projects/create"
-        method="POST"
-        className="space-y-2 w-full max-w-md"
-      >
-        <input type="hidden" name="workspaceId" value={workspaceId} />
-
-        <input
-          name="name"
-          className="border px-3 py-2 rounded w-full"
-          placeholder="Project name"
-          required
-        />
-
-        <button
-          type="submit"
-          className="px-4 py-2 bg-blue-600 text-white rounded"
+        <Link
+          href="/dashboard/projects/new"
+          className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition"
         >
-          Create Project
-        </button>
-      </form>
-
-      {/* Project List */}
-      <div className="space-y-4">
-        {projects.length === 0 && (
-          <p className="text-gray-500">No projects yet.</p>
-        )}
-
-        {projects.map((project) => (
-          <Link
-            key={project.id}
-            href={`/dashboard/projects/${project.id}`}
-            className="block border rounded p-4 hover:bg-gray-50 transition"
-          >
-            <div className="font-medium">{project.name}</div>
-            <div className="text-sm text-gray-500">
-              {new Date(project.createdAt).toLocaleDateString()}
-            </div>
-          </Link>
-        ))}
+          + New Project
+        </Link>
       </div>
+
+      {projects.length === 0 ? (
+        <div className="text-gray-500">
+          You have no projects yet. Create your first one!
+        </div>
+      ) : (
+        <ul className="space-y-4">
+          {projects.map((project: any) => (
+            <li key={project.id}>
+              <Link
+                href={`/dashboard/projects/${project.id}`}
+                className="block border p-4 rounded-md hover:bg-gray-50 dark:hover:bg-gray-900 transition"
+              >
+                <div className="text-xl font-semibold">{project.name}</div>
+                <div className="text-sm text-gray-500">
+                  Created {new Date(project.createdAt).toLocaleDateString()}
+                </div>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
