@@ -9,31 +9,38 @@ export async function POST(req: Request) {
       return Response.json({ success: false, error: "Missing fields" });
     }
 
-    const existing = await prisma.user.findUnique({ where: { email } });
-    if (existing) {
+    // Check if user already exists
+    const exists = await prisma.user.findUnique({ where: { email } });
+    if (exists) {
       return Response.json({ success: false, error: "User already exists" });
     }
 
+    // Hash password
     const hashed = await hash(password, 10);
 
-    const user = await prisma.user.create({
-      data: {
-        email,
-        password: hashed,
-        name,
-        workspace: {
-          create: {
-            name: name ? `${name}'s Workspace` : "My Workspace",
-          },
+    // Create user + workspace in one transaction
+    const user = await prisma.$transaction(async (tx) => {
+      const workspace = await tx.workspace.create({
+        data: {
+          name: name ? `${name}'s Workspace` : "My Workspace",
         },
-      },
-      include: {
-        workspace: true,
-      },
+      });
+
+      const newUser = await tx.user.create({
+        data: {
+          email,
+          password: hashed,
+          name,
+          workspaceId: workspace.id,
+        },
+      });
+
+      return newUser;
     });
 
     return Response.json({ success: true, user });
-  } catch (e: any) {
-    return Response.json({ success: false, error: e.message });
+  } catch (error: any) {
+    console.error("REGISTER ERROR:", error);
+    return Response.json({ success: false, error: error.message });
   }
 }
