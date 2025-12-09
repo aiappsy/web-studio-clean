@@ -16,40 +16,40 @@ export class SecurityManager {
   static encryptApiKey(apiKey: string): EncryptedData {
     const iv = randomBytes(16)
     const cipher = createCipheriv(ALGORITHM, Buffer.from(ENCRYPTION_KEY, 'hex'), iv)
-    
+
     let encrypted = cipher.update(apiKey, 'utf8', 'hex')
     encrypted += cipher.final('hex')
-    
+
     const tag = cipher.getAuthTag()
-    
+
     return {
       data: encrypted,
       iv: iv.toString('hex'),
       tag: tag.toString('hex')
     }
   }
-  
+
   // Decrypt API keys
   static decryptApiKey(encrypted: EncryptedData): string {
     const decipher = createDecipheriv(
-      ALGORITHM, 
-      Buffer.from(ENCRYPTION_KEY, 'hex'), 
+      ALGORITHM,
+      Buffer.from(ENCRYPTION_KEY, 'hex'),
       Buffer.from(encrypted.iv, 'hex')
     )
-    
+
     decipher.setAuthTag(Buffer.from(encrypted.tag, 'hex'))
-    
+
     let decrypted = decipher.update(encrypted.data, 'hex', 'utf8')
     decrypted += decipher.final('utf8')
-    
+
     return decrypted
   }
-  
+
   // Hash API keys for identification
   static hashApiKey(apiKey: string): string {
     return createHash('sha256').update(apiKey).digest('hex')
   }
-  
+
   // Validate API key format
   static validateApiKeyFormat(key: string, provider: string): boolean {
     const patterns = {
@@ -57,26 +57,24 @@ export class SecurityManager {
       anthropic: /^sk-ant-api03-[a-zA-Z0-9_-]{95,}$/,
       deepseek: /^sk-[a-zA-Z0-9]{48}$/
     }
-    
+
     return patterns[provider as keyof typeof patterns]?.test(key) || false
   }
-  
+
   // Generate secure tokens
   static generateSecureToken(length: number = 32): string {
     return randomBytes(length).toString('hex')
   }
-  
+
   // Sanitize HTML content
   static sanitizeHtml(html: string): string {
-    // This would integrate with DOMPurify in the browser
-    // For now, basic sanitization
     return html
       .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
       .replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, '')
       .replace(/javascript:/gi, '')
       .replace(/on\w+\s*=/gi, '')
   }
-  
+
   // Validate JSON schema
   static validateJsonSchema(data: any, schema: z.ZodSchema): boolean {
     try {
@@ -86,18 +84,17 @@ export class SecurityManager {
       return false
     }
   }
-  
+
   // Repair malformed JSON
   static repairJson(jsonString: string): any {
     try {
       return JSON.parse(jsonString)
     } catch {
-      // Basic JSON repair attempts
       let repaired = jsonString
-        .replace(/,(\s*[}\]])/g, '$1') // Remove trailing commas
-        .replace(/(['"])?([a-zA-Z0-9_]+)(['"])?:/g, '"$2":') // Quote property names
-        .replace(/'/g, '"') // Single quotes to double quotes
-      
+        .replace(/,(\s*[}\]])/g, '$1')
+        .replace(/(['"])?([a-zA-Z0-9_]+)(['"])?:/g, '"$2":')
+        .replace(/'/g, '"')
+
       try {
         return JSON.parse(repaired)
       } catch {
@@ -105,12 +102,12 @@ export class SecurityManager {
       }
     }
   }
-  
+
   // Rate limiting key generator
   static generateRateLimitKey(identifier: string, window: string): string {
     return `rate_limit:${identifier}:${window}`
   }
-  
+
   // Content Security Policy headers
   static getCSPHeaders(): Record<string, string> {
     return {
@@ -132,17 +129,17 @@ export class SecurityManager {
       'Permissions-Policy': 'camera=(), microphone=(), geolocation=()'
     }
   }
-  
+
   // CSRF token generation
   static generateCSRFToken(): string {
     return randomBytes(32).toString('base64')
   }
-  
+
   // Validate CSRF token
   static validateCSRFToken(token: string, sessionToken: string): boolean {
     return token === sessionToken
   }
-  
+
   // Secure cookie options
   static getCookieOptions(isProduction: boolean = true): {
     httpOnly: boolean
@@ -166,19 +163,19 @@ export const securitySchemas = {
     apiKey: z.string().min(10),
     name: z.string().min(1).max(100)
   }),
-  
+
   workspace: z.object({
     name: z.string().min(1).max(100),
     description: z.string().max(500).optional(),
     slug: z.string().min(1).max(50).regex(/^[a-z0-9-]+$/)
   }),
-  
+
   project: z.object({
     name: z.string().min(1).max(100),
     description: z.string().max(500).optional(),
     workspaceId: z.string().uuid()
   }),
-  
+
   aiRequest: z.object({
     model: z.string().min(1),
     messages: z.array(z.object({
@@ -220,31 +217,31 @@ export const rateLimitConfig = {
 export const errorClassifier = {
   isQuotaError: (error: any): boolean => {
     return error?.message?.toLowerCase().includes('quota') ||
-           error?.message?.toLowerCase().includes('limit') ||
-           error?.code === 'insufficient_quota'
+      error?.message?.toLowerCase().includes('limit') ||
+      error?.code === 'insufficient_quota'
   },
-  
+
   isInvalidKeyError: (error: any): boolean => {
     return error?.message?.toLowerCase().includes('invalid') ||
-           error?.message?.toLowerCase().includes('unauthorized') ||
-           error?.code === 'invalid_api_key'
+      error?.message?.toLowerCase().includes('unauthorized') ||
+      error?.code === 'invalid_api_key'
   },
-  
+
   isModelUnavailableError: (error: any): boolean => {
     return error?.message?.toLowerCase().includes('model') &&
-           error?.message?.toLowerCase().includes('not available')
+      error?.message?.toLowerCase().includes('not available')
   },
-  
+
   isConnectionTimeoutError: (error: any): boolean => {
     return error?.message?.toLowerCase().includes('timeout') ||
-           error?.code === 'ETIMEDOUT' ||
-           error?.type === 'timeout'
+      error?.code === 'ETIMEDOUT' ||
+      error?.type === 'timeout'
   },
-  
+
   isMalformedOutputError: (error: any): boolean => {
     return error?.message?.toLowerCase().includes('json') ||
-           error?.message?.toLowerCase().includes('malformed') ||
-           error?.type === 'json_error'
+      error?.message?.toLowerCase().includes('malformed') ||
+      error?.type === 'json_error'
   }
 }
 
@@ -253,7 +250,7 @@ export class RequestTracer {
   static generateRequestId(): string {
     return `req_${Date.now()}_${randomBytes(8).toString('hex')}`
   }
-  
+
   static formatLogMessage(requestId: string, level: string, message: string, meta?: any): string {
     const logEntry = {
       requestId,
@@ -264,4 +261,40 @@ export class RequestTracer {
     }
     return JSON.stringify(logEntry)
   }
+}
+
+/* ---------------------------------------------------------
+   MISSING EXPORTS ADDED BELOW (required by your app)
+--------------------------------------------------------- */
+
+// Very simple prompt sanitizer (expected by routes/api/ai)
+export function sanitizePrompt(prompt: string): string {
+  return prompt.replace(/<[^>]*>?/gm, '').trim()
+}
+
+// Very simple in-memory rate limiter for now
+const requestBuckets = new Map<string, { count: number; ts: number }>()
+
+export function rateLimit(identifier: string, windowMs = 60000, limit = 60): boolean {
+  const now = Date.now()
+  const bucket = requestBuckets.get(identifier)
+
+  if (!bucket) {
+    requestBuckets.set(identifier, { count: 1, ts: now })
+    return true
+  }
+
+  // Reset window
+  if (now - bucket.ts > windowMs) {
+    requestBuckets.set(identifier, { count: 1, ts: now })
+    return true
+  }
+
+  // Reject if over limit
+  if (bucket.count >= limit) {
+    return false
+  }
+
+  bucket.count++
+  return true
 }
