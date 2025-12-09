@@ -15,14 +15,16 @@ export default function LoginPage() {
   const [error, setError] = useState('');
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setError('');
+  e.preventDefault();
+  setError('');
 
-    const res = await signIn('credentials', {
-      redirect: false,
-      email,
-      password
-    });
+  try {
+    // your login logic here
+  } catch (err: any) {
+    setError(err.message || 'Login failed.');
+  }
+}
+
 
     if (res?.error) {
       setError('Invalid credentials');
@@ -59,4 +61,5 @@ export default function LoginPage() {
     </div>
   );
 }
+
 
