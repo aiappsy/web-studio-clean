@@ -2,53 +2,65 @@ import { NextResponse } from "next/server";
 import JSZip from "jszip";
 import { prisma } from "@/lib/prisma";
 
+export const runtime = "nodejs";
+
 export async function GET(
-  req: Request,
+  request: Request,
   { params }: { params: { siteId: string } }
 ) {
   try {
+    const siteId = params.siteId;
+
+    // Fetch site with pages
     const site = await prisma.site.findUnique({
-      where: { id: params.siteId },
-      include: {
-        pages: {
-          orderBy: { updatedAt: "desc" }
-        }
-      }
+      where: { id: siteId },
+      include: { pages: true },
     });
 
     if (!site) {
-      return new NextResponse("Site not found", { status: 404 });
+      return NextResponse.json({ error: "Site not found" }, { status: 404 });
     }
 
+    // Create ZIP
     const zip = new JSZip();
 
-    // Add index.html from latest page
-    const latestPage = site.pages[0];
-    const html = latestPage?.content || "<h1>No content</h1>";
+    // Add each page as an HTML file
+    site.pages.forEach((page) => {
+      const filename =
+        page.slug === "index" ? "index.html" : `${page.slug}.html`;
 
-    zip.file("index.html", html);
+      const html = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>${page.title || "Untitled Page"}</title>
+</head>
+<body>
+  ${page.html || ""}
+</body>
+</html>
+`;
 
-    // Add optional CSS folder
-    const assetsFolder = zip.folder("assets");
-    if (assetsFolder) {
-      assetsFolder.file("styles.css", "/* Add your CSS here */");
-    }
+      zip.file(filename, html);
+    });
 
-    // Generate zip binary
-    const file = await zip.generateAsync({ type: "uint8array" });
+    // Generate the ZIP as a Buffer
+    const zipBuffer = await zip.generateAsync({ type: "uint8array" });
 
-    return new NextResponse(file, {
+    return new NextResponse(zipBuffer, {
       status: 200,
       headers: {
         "Content-Type": "application/zip",
-        "Content-Disposition": `attachment; filename="${site.name.replace(
-          /\s+/g,
-          "_"
-        )}.zip"`
-      }
+        "Content-Disposition": `attachment; filename="${site.name}_export.zip"`,
+      },
     });
   } catch (error) {
-    console.error("ZIP ERROR:", error);
-    return new NextResponse("Error generating ZIP", { status: 500 });
+    console.error("ZIP download error:", error);
+    return NextResponse.json(
+      { error: "Failed to generate ZIP file" },
+      { status: 500 }
+    );
   }
 }
