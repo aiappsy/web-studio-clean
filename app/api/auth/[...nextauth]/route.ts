@@ -1,7 +1,7 @@
 export const runtime = "nodejs";
 
 import NextAuth from "next-auth";
-import Credentials from "next-auth/providers/credentials";
+import CredentialsProvider from "next-auth/providers/credentials";
 import { prisma } from "@/lib/prisma";
 import { compare } from "bcryptjs";
 
@@ -11,15 +11,17 @@ const handler = NextAuth({
   },
 
   providers: [
-    Credentials({
+    CredentialsProvider({
       name: "Credentials",
       credentials: {
-        email: {},
-        password: {},
+        email: { label: "Email", type: "email" },
+        password: { label: "Password", type: "password" },
       },
 
       async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) return null;
+        if (!credentials?.email || !credentials.password) {
+          return null;
+        }
 
         const user = await prisma.user.findUnique({
           where: { email: credentials.email },
@@ -31,7 +33,7 @@ const handler = NextAuth({
         const valid = await compare(credentials.password, user.password);
         if (!valid) return null;
 
-        // What goes into the JWT "user" object
+        // Returned user fields become JWT token fields
         return {
           id: user.id,
           email: user.email,
@@ -44,7 +46,6 @@ const handler = NextAuth({
 
   callbacks: {
     async jwt({ token, user }) {
-      // On first login, merge user fields into JWT token
       if (user) {
         token.id = user.id;
         token.email = user.email;
@@ -55,7 +56,6 @@ const handler = NextAuth({
     },
 
     async session({ session, token }) {
-      // Attach token fields to session
       if (session.user) {
         session.user.id = token.id;
         session.user.email = token.email;
@@ -64,6 +64,11 @@ const handler = NextAuth({
       }
       return session;
     },
+  },
+
+  // IMPORTANT → your custom login page
+  pages: {
+    signIn: "/auth/login",
   },
 });
 
