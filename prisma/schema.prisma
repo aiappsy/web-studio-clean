@@ -8,12 +8,16 @@ datasource db {
 }
 
 model User {
-  id           String       @id @default(cuid())
+  id           String    @id @default(cuid())
   name         String?
-  email        String?      @unique
+  email        String?   @unique
   password     String?
   image        String?
-  createdAt    DateTime     @default(now())
+  createdAt    DateTime  @default(now())
+
+  // A user belongs to exactly one workspace
+  workspaceId  String?
+  workspace    Workspace? @relation(fields: [workspaceId], references: [id])
 
   accounts     Account[]
   sessions     Session[]
@@ -59,6 +63,8 @@ model Workspace {
   id         String     @id @default(cuid())
   name       String
   createdAt  DateTime   @default(now())
+
+  users      User[]
   projects   Project[]
   templates  Template[]
   apiKeys    ApiKey[]
@@ -67,11 +73,11 @@ model Workspace {
 }
 
 model Project {
-  id          String       @id @default(cuid())
+  id          String     @id @default(cuid())
   name        String
   workspaceId String
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
   publishedAt DateTime?
 
   workspace Workspace @relation(fields: [workspaceId], references: [id])
@@ -84,9 +90,9 @@ model Page {
   projectId String
   name      String
   path      String
-  tree      Json
-  createdAt DateTime     @default(now())
-  updatedAt DateTime     @updatedAt
+  tree      Json        // FULL PAGE JSON
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
 
   project Project @relation(fields: [projectId], references: [id])
   versions PageVersion[]
