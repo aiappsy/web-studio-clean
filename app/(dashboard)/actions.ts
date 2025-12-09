@@ -1,26 +1,29 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { prisma } from "@/lib/db";
+import { prisma } from "@/lib/prisma";
 import { generateId } from "@/utils/ai";
 
-// ---------- CREATE PROJECT ----------
+// ---------------------------------------------------------------------------
+// CREATE PROJECT
+// ---------------------------------------------------------------------------
 export async function createProject(prevState: any, formData: FormData) {
   try {
-    const userId = formData.get("userId") as string;
+    const workspaceId = formData.get("workspaceId") as string;
     const name = formData.get("name") as string;
     const description = formData.get("description") as string;
 
-    if (!userId || !name) {
-      return { error: "User ID and project name are required" };
+    if (!workspaceId || !name) {
+      return { error: "Workspace ID and project name are required" };
     }
 
     const project = await prisma.project.create({
       data: {
         id: generateId(),
         name,
-        workspaceId: userId, // Each user has their own workspace
-        // If you want Project to belong to User instead of Workspace, adjust here
+        workspaceId,
+        // OPTIONAL: uncomment if needed
+        // description,
       },
     });
 
@@ -29,27 +32,27 @@ export async function createProject(prevState: any, formData: FormData) {
 
     return { success: true, projectId: project.id };
   } catch (error) {
-    console.error("Failed to create project:", error);
+    console.error("CREATE PROJECT ERROR:", error);
     return { error: "Failed to create project" };
   }
 }
 
-// ---------- UPDATE PROJECT ----------
+// ---------------------------------------------------------------------------
+// UPDATE PROJECT
+// ---------------------------------------------------------------------------
 export async function updateProject(prevState: any, formData: FormData) {
   try {
     const projectId = formData.get("projectId") as string;
     const name = formData.get("name") as string;
     const description = formData.get("description") as string;
 
-    if (!projectId) {
-      return { error: "Project ID is required" };
-    }
+    if (!projectId) return { error: "Project ID is required" };
 
     await prisma.project.update({
       where: { id: projectId },
       data: {
         name: name || undefined,
-        description: description || undefined,
+        // description || undefined,
       },
     });
 
@@ -58,19 +61,19 @@ export async function updateProject(prevState: any, formData: FormData) {
 
     return { success: true };
   } catch (error) {
-    console.error("Failed to update project:", error);
+    console.error("UPDATE PROJECT ERROR:", error);
     return { error: "Failed to update project" };
   }
 }
 
-// ---------- DELETE PROJECT ----------
+// ---------------------------------------------------------------------------
+// DELETE PROJECT
+// ---------------------------------------------------------------------------
 export async function deleteProject(prevState: any, formData: FormData) {
   try {
     const projectId = formData.get("projectId") as string;
 
-    if (!projectId) {
-      return { error: "Project ID is required" };
-    }
+    if (!projectId) return { error: "Project ID is required" };
 
     await prisma.project.delete({
       where: { id: projectId },
@@ -81,29 +84,27 @@ export async function deleteProject(prevState: any, formData: FormData) {
 
     return { success: true };
   } catch (error) {
-    console.error("Failed to delete project:", error);
+    console.error("DELETE PROJECT ERROR:", error);
     return { error: "Failed to delete project" };
   }
 }
 
-// ---------- DUPLICATE PROJECT ----------
+// ---------------------------------------------------------------------------
+// DUPLICATE PROJECT
+// ---------------------------------------------------------------------------
 export async function duplicateProject(prevState: any, formData: FormData) {
   try {
     const projectId = formData.get("projectId") as string;
     const newName = formData.get("name") as string;
 
-    if (!projectId) {
-      return { error: "Project ID is required" };
-    }
+    if (!projectId) return { error: "Project ID is required" };
 
     const original = await prisma.project.findUnique({
       where: { id: projectId },
       include: { pages: true },
     });
 
-    if (!original) {
-      return { error: "Project not found" };
-    }
+    if (!original) return { error: "Original project not found" };
 
     const newProjectId = generateId();
 
@@ -134,12 +135,14 @@ export async function duplicateProject(prevState: any, formData: FormData) {
 
     return { success: true, projectId: newProjectId };
   } catch (error) {
-    console.error("Failed to duplicate project:", error);
+    console.error("DUPLICATE PROJECT ERROR:", error);
     return { error: "Failed to duplicate project" };
   }
 }
 
-// ---------- GET ONE PROJECT ----------
+// ---------------------------------------------------------------------------
+// GET ONE PROJECT
+// ---------------------------------------------------------------------------
 export async function getProject(projectId: string) {
   try {
     if (!projectId) return { error: "Project ID is required" };
@@ -153,22 +156,24 @@ export async function getProject(projectId: string) {
 
     return { success: true, project };
   } catch (error) {
-    console.error("Failed to get project:", error);
+    console.error("GET PROJECT ERROR:", error);
     return { error: "Failed to get project" };
   }
 }
 
-// ---------- GET USER PROJECTS ----------
-export async function getProjects(userId: string) {
+// ---------------------------------------------------------------------------
+// GET ALL PROJECTS FOR WORKSPACE
+// ---------------------------------------------------------------------------
+export async function getProjects(workspaceId: string) {
   try {
     const projects = await prisma.project.findMany({
-      where: { workspaceId: userId },
+      where: { workspaceId },
       orderBy: { createdAt: "desc" },
     });
 
     return { success: true, projects };
   } catch (error) {
-    console.error("Failed to get projects:", error);
+    console.error("GET PROJECTS ERROR:", error);
     return { error: "Failed to get projects" };
   }
 }
