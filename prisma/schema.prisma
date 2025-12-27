@@ -79,6 +79,7 @@ model Project {
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
   publishedAt DateTime?
+  schema      Json?
 
   workspace Workspace @relation(fields: [workspaceId], references: [id])
   pages     Page[]
